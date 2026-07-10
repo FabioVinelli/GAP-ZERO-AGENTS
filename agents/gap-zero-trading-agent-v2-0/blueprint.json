@@ -1,0 +1,224 @@
+{
+  "agentName": "GAP/ZERO Trading Agent v2.0",
+  "verdict": "APPROVE",
+  "actionGapScore": 88,
+  "subscores": {
+    "friction": 22,
+    "timeToAction": 22,
+    "trust": 23,
+    "qualityGovernance": 21
+  },
+  "maturityState": "agentic ROI zone",
+  "outcome": {
+    "metric": "% validated strategies reaching profitable paper P&L within risk limits",
+    "baseline": "0%",
+    "target": "60% by Q4 2026",
+    "owner": "Head of Quantitative Trading"
+  },
+  "pipeline": [
+    {
+      "label": "Signal Detected",
+      "type": "insight",
+      "wired": true
+    },
+    {
+      "label": "Evidence Logger",
+      "type": "system",
+      "wired": true
+    },
+    {
+      "label": "Backtest Engine",
+      "type": "system",
+      "wired": true
+    },
+    {
+      "label": "Paper Execution",
+      "type": "action",
+      "wired": true
+    },
+    {
+      "label": "Invalidation Check",
+      "type": "system",
+      "wired": true
+    },
+    {
+      "label": "Human Approval Gate",
+      "type": "human",
+      "wired": true
+    },
+    {
+      "label": "Live Execution",
+      "type": "action",
+      "wired": true
+    }
+  ],
+  "friction": [
+    {
+      "point": "Manual credential injection for live endpoint",
+      "fix": "Pre-declared vault-stored credentials fetched at policy gate; never inferred at runtime"
+    },
+    {
+      "point": "Backtest→paper ladder skip risk",
+      "fix": "Evaluator hard-blocks any live request without confirmed backtest+paper audit records"
+    },
+    {
+      "point": "Stop-loss breach detection latency",
+      "fix": "Intraday polling loop (max 1 cycle) triggers page to owner; kill switch auto-arms"
+    },
+    {
+      "point": "Position sizing ambiguity",
+      "fix": "Sizing engine reads pre-declared capital %, rejects >2% without escalation log"
+    }
+  ],
+  "wiring": [
+    {
+      "step": "Backtest Run",
+      "mechanism": "File op / orchestrator writes parameterized config; backtest engine executes",
+      "landingCheck": "Trade log written with full parameter set, strategy ID, timestamp, P&L summary",
+      "reversibility": "reversible"
+    },
+    {
+      "step": "Paper Trade Order",
+      "mechanism": "REST API call to paper endpoint with order payload",
+      "landingCheck": "Fill confirmation returned with order ID; logged to audit trail",
+      "reversibility": "reversible"
+    },
+    {
+      "step": "Invalidation Check",
+      "mechanism": "Rules engine evaluates post-trade metrics against pre-declared invalidation conditions",
+      "landingCheck": "Pass/fail record written to audit log; escalation paged if fail",
+      "reversibility": "reversible"
+    },
+    {
+      "step": "Live Order",
+      "mechanism": "REST API call to live endpoint; position sizing verified pre-call",
+      "landingCheck": "Fill confirmation + position reconciled against intended size within 1 cycle",
+      "reversibility": "irreversible"
+    }
+  ],
+  "policyRules": [
+    {
+      "riskClass": "Live order (any size)",
+      "decision": "escalate"
+    },
+    {
+      "riskClass": "Position size >2% capital per trade",
+      "decision": "escalate"
+    },
+    {
+      "riskClass": "Paper trade or backtest",
+      "decision": "allow"
+    },
+    {
+      "riskClass": "Ladder skip detected (backtest or paper missing)",
+      "decision": "block"
+    }
+  ],
+  "humanTouchpoint": {
+    "design": "Single pre-live-execution approval checkpoint; owner reviews audit trail, backtest P&L, paper fill records, risk parameters before live gate opens",
+    "owner": "Head of Quantitative Trading",
+    "detection": "Stop-loss breach or invalidation trigger fires page within one intraday cycle; kill switch auto-arms pending owner response",
+    "rollback": "Flatten position via kill switch (live); discard fill record (paper); backtest artifacts retained for audit"
+  },
+  "evaluator": {
+    "criteria": [
+      "Signal maps to logged evidence + rule + timeframe + instrument + risk policy — all five fields present",
+      "Invalidation logic explicitly declared per trade before execution",
+      "Backtest→paper→live ladder unbroken; no stage skipped per audit record",
+      "Full audit record exists for every recommendation and action",
+      "Position sizing and max-loss limits verified against pre-declared parameters; no inference"
+    ],
+    "threshold": "Any single criterion failure fails the run; no partial credit; evaluator is separate module, never the generator"
+  },
+  "kpis": [
+    {
+      "name": "Decision Quality",
+      "target": "Win rate risk-adjusted (Sharpe ≥ 0.5 over rolling 20 trades)"
+    },
+    {
+      "name": "Time Signal to Action",
+      "target": "Signal to paper fill ≤ 1 intraday cycle; live ≤ 1 cycle post-approval"
+    },
+    {
+      "name": "Unmodified Approval Rate",
+      "target": "≥ 70% of pre-live packages approved without revision"
+    },
+    {
+      "name": "Outcome Delta",
+      "target": "60% of validated strategies profitable in paper vs. 0% baseline by Q4 2026"
+    }
+  ],
+  "poc": {
+    "scope": "One strategy class; paper-trade only in cycle 1; live execution gate locked",
+    "sprintContract": "20 validated signals with full audit trail (evidence+backtest+paper fill+evaluator pass) before scale discussion",
+    "duration": "4 weeks or 50 runs, whichever comes first",
+    "successMetric": "60% of signals profitable in paper trade within declared risk limits",
+    "killCriteria": "3 consecutive max-loss breaches OR Sharpe < 0.5 over 20 trades",
+    "scaleCriteria": "Success metric met + zero critical evaluator failures + full audit coverage",
+    "reviewTrigger": "After 50 runs OR first live-execution request, whichever is earlier"
+  },
+  "gates": [
+    {
+      "id": 1,
+      "name": "Outcome contract + owner",
+      "pass": true
+    },
+    {
+      "id": 2,
+      "name": "Maturity classified",
+      "pass": true
+    },
+    {
+      "id": 3,
+      "name": "Pipeline fully typed/wired",
+      "pass": true
+    },
+    {
+      "id": 4,
+      "name": "Write tools mechanism+check+reversibility",
+      "pass": true
+    },
+    {
+      "id": 5,
+      "name": "Policy engine logs every write",
+      "pass": true
+    },
+    {
+      "id": 6,
+      "name": "Terminal node action/handoff/block",
+      "pass": true
+    },
+    {
+      "id": 7,
+      "name": "<=1 human validation no middleware",
+      "pass": true
+    },
+    {
+      "id": 8,
+      "name": "Owner+detection+rollback named",
+      "pass": true
+    },
+    {
+      "id": 9,
+      "name": "Trace covers actuation+policy+validator",
+      "pass": true
+    },
+    {
+      "id": 10,
+      "name": "Separate evaluator hard thresholds",
+      "pass": true
+    },
+    {
+      "id": 11,
+      "name": "KPI standard friction<=1",
+      "pass": true
+    },
+    {
+      "id": 12,
+      "name": "PoC sprint+kill+scale+review",
+      "pass": true
+    }
+  ],
+  "antiPatterns": [],
+  "nextAction": "Instantiate evaluator module as separate process from signal generator; wire it to audit log read-only endpoint and run against 5 historical signals today to confirm hard-threshold logic fires correctly before any live credential provisioning"
+}
