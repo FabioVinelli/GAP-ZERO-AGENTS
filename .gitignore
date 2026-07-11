@@ -1,0 +1,28 @@
+# Secrets — never committed, no exceptions
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Runtime & build artifacts
+node_modules/
+dist/
+.venv/
+__pycache__/
+*.pyc
+
+# Agent runtime state (regenerated per run)
+traces/
+test-output/
+memory.db
+*.db-shm
+*.db-wal
+
+# Studio-generated agents stay local until promoted to agents/
+gapzero-studio 2/generated/
+
+# OS / editor noise
+.DS_Store
+*.zip
+vite.config.js.timestamp-*

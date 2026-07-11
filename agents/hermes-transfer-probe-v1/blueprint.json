@@ -1,0 +1,224 @@
+{
+  "agentName": "Hermes Transfer Probe v1",
+  "verdict": "APPROVE",
+  "actionGapScore": 91,
+  "subscores": {
+    "friction": 23,
+    "timeToAction": 23,
+    "trust": 22,
+    "qualityGovernance": 23
+  },
+  "maturityState": "agentic ROI zone",
+  "outcome": {
+    "metric": "% toolset verification checks passing with landed evidence",
+    "baseline": "0%",
+    "target": "100%",
+    "owner": "Ko"
+  },
+  "pipeline": [
+    {
+      "label": "Cycle Trigger",
+      "type": "insight",
+      "wired": true
+    },
+    {
+      "label": "Env Fingerprint",
+      "type": "action",
+      "wired": true
+    },
+    {
+      "label": "File Round-Trip",
+      "type": "action",
+      "wired": true
+    },
+    {
+      "label": "Shell Exec Test",
+      "type": "action",
+      "wired": true
+    },
+    {
+      "label": "Structured Echo",
+      "type": "action",
+      "wired": true
+    },
+    {
+      "label": "Ko Review",
+      "type": "human",
+      "wired": true
+    },
+    {
+      "label": "Run Summary Landed",
+      "type": "action",
+      "wired": true
+    }
+  ],
+  "friction": [
+    {
+      "point": "Manual git pull initiation before cycle launch",
+      "fix": "Add post-pull git hook to auto-trigger cycle; reduces operator initiation to zero-touch"
+    },
+    {
+      "point": "Ko must inspect JSONL trace manually if flag raised",
+      "fix": "Auto-render structured diff of failed landing checks in run summary for instant triage"
+    },
+    {
+      "point": "Dual-backend sequencing undefined — Ko may run out of order",
+      "fix": "Sprint contract enforces Ollama first, then Anthropic; lock backend order in cycle manifest"
+    },
+    {
+      "point": "No automated clock on 1-week PoC boundary",
+      "fix": "Embed deadline assertion in cycle metadata; warn if cycle count < 2 at T-1 day"
+    }
+  ],
+  "wiring": [
+    {
+      "step": "Environment fingerprint",
+      "mechanism": "file op — write fingerprint.json to agent dir; read back and assert byte-identical hostname+python_version+model_id",
+      "landingCheck": "fingerprint.json present, parsed, all fields match expected values; failure halts cycle",
+      "reversibility": "reversible"
+    },
+    {
+      "step": "File round-trip test",
+      "mechanism": "file op — write test file with known content; read back; compute SHA-256 hash of both; assert match",
+      "landingCheck": "hash match logged to JSONL trace with timestamp; mismatch = immediate block",
+      "reversibility": "reversible"
+    },
+    {
+      "step": "Shell execution test",
+      "mechanism": "orchestrator subprocess call — run benign command echo HERMES_OK; capture exit code and stdout",
+      "landingCheck": "exit code == 0 AND stdout contains HERMES_OK marker; both values written to trace entry",
+      "reversibility": "reversible"
+    },
+    {
+      "step": "Structured echo test",
+      "mechanism": "file op — serialize known JSON payload; pass to tool; receive return; assert byte-identical + schema validation",
+      "landingCheck": "returned payload compared byte-for-byte; schema validator result logged; any deviation = failure",
+      "reversibility": "reversible"
+    }
+  ],
+  "policyRules": [
+    {
+      "riskClass": "local reversible file/subprocess inside agent dir",
+      "decision": "allow"
+    },
+    {
+      "riskClass": "write operation outside agent directory",
+      "decision": "block"
+    },
+    {
+      "riskClass": "network call or credential access attempt",
+      "decision": "escalate"
+    },
+    {
+      "riskClass": "escalation event itself — occurrence is test failure",
+      "decision": "block"
+    }
+  ],
+  "humanTouchpoint": {
+    "design": "Single post-cycle review by Ko: receives run summary with pass/fail per check, policy log, JSONL trace path. Cycle auto-halts on any landing-check failure or policy escalation before Ko review.",
+    "owner": "Ko",
+    "detection": "Any landing-check assertion failure or policy escalation sets cycle_status=FAILED in run summary; summary written before human review; Ko reviews artifact not live state",
+    "rollback": "Delete agent test-output directory entirely; no writes exist outside it; single rm -rf; reversible with zero side effects"
+  },
+  "evaluator": {
+    "criteria": [
+      "Every executed test has a corresponding JSONL trace entry with landed artifact reference — no trace entry means check does not exist",
+      "No test marked passed without a verifiable on-disk artifact (file, hash, stdout capture) independently re-readable",
+      "Policy engine emitted a logged decision record for every tool call in the cycle — gap in policy log = run failure",
+      "Entire cycle produced zero file writes outside agent directory — verified by scanning trace write paths",
+      "Trace JSONL is fully parseable end-to-end with no missing or malformed entries for the complete run"
+    ],
+    "threshold": "Any single criterion failure fails the entire run — partial pass not accepted"
+  },
+  "kpis": [
+    {
+      "name": "Decision quality",
+      "target": "landed evidence / checks claimed == 1.00 every cycle"
+    },
+    {
+      "name": "Time cycle-start to last landed check",
+      "target": "<60s per full 4-check cycle on MacBook M4"
+    },
+    {
+      "name": "Unmodified acceptance rate",
+      "target": ">=90% of run summaries accepted by Ko without edit"
+    },
+    {
+      "name": "Outcome delta",
+      "target": "100% checks passing vs 0% baseline by 2026-07-16"
+    }
+  ],
+  "poc": {
+    "scope": "One verification cycle per backend (Ollama qwen2.5-coder:7b + Anthropic cloud), MacBook Air M4 only, starting cycle 1",
+    "sprintContract": "2 complete cycles (one per backend) with full JSONL trace produced and Ko-reviewed before any other agent transferred to Hermes Desktop",
+    "duration": "1 week or 10 cycles whichever is earlier",
+    "successMetric": "100% of 4 checks landed with evidence on at least one backend within sprint window",
+    "killCriteria": "Local Ollama fails to produce a single valid tool call in 5 consecutive cycles OR trace file corrupted/unparseable on 2 separate cycles",
+    "scaleCriteria": "100% checks landed on both backends AND zero policy violations across all sprint cycles",
+    "reviewTrigger": "After 10 cycles OR first policy escalation whichever is earlier — Ko mandatory gate review before cycle 11 or any further agent transfer"
+  },
+  "gates": [
+    {
+      "id": 1,
+      "name": "Outcome contract + owner",
+      "pass": true
+    },
+    {
+      "id": 2,
+      "name": "Maturity classified",
+      "pass": true
+    },
+    {
+      "id": 3,
+      "name": "Pipeline fully typed/wired",
+      "pass": true
+    },
+    {
+      "id": 4,
+      "name": "Write tools mechanism+check+reversibility",
+      "pass": true
+    },
+    {
+      "id": 5,
+      "name": "Policy engine logs every write",
+      "pass": true
+    },
+    {
+      "id": 6,
+      "name": "Terminal node action/handoff/block",
+      "pass": true
+    },
+    {
+      "id": 7,
+      "name": "<=1 human no middleware",
+      "pass": true
+    },
+    {
+      "id": 8,
+      "name": "Owner+detection+rollback named",
+      "pass": true
+    },
+    {
+      "id": 9,
+      "name": "Trace covers actuation+policy+validator",
+      "pass": true
+    },
+    {
+      "id": 10,
+      "name": "Separate evaluator hard thresholds",
+      "pass": true
+    },
+    {
+      "id": 11,
+      "name": "KPI standard friction<=1",
+      "pass": true
+    },
+    {
+      "id": 12,
+      "name": "PoC sprint+kill+scale+review",
+      "pass": true
+    }
+  ],
+  "antiPatterns": [],
+  "nextAction": "On MacBook Air M4 today: git pull transferred repo, create agent test-output directory, run cycle 1 against Ollama qwen2.5-coder:7b, confirm fingerprint.json lands, inspect JSONL trace for all 4 check entries, record pass/fail in run summary before EOD."
+}

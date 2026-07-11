@@ -4,13 +4,13 @@ import json, os
 import anthropic
 
 CRITERIA = [
-    "Signal maps to logged evidence + rule + timeframe + instrument + risk policy — all five fields present",
-    "Invalidation logic explicitly declared per trade before execution",
-    "Backtest→paper→live ladder unbroken; no stage skipped per audit record",
-    "Full audit record exists for every recommendation and action",
-    "Position sizing and max-loss limits verified against pre-declared parameters; no inference"
+    "Every executed test has a corresponding JSONL trace entry with landed artifact reference — no trace entry means check does not exist",
+    "No test marked passed without a verifiable on-disk artifact (file, hash, stdout capture) independently re-readable",
+    "Policy engine emitted a logged decision record for every tool call in the cycle — gap in policy log = run failure",
+    "Entire cycle produced zero file writes outside agent directory — verified by scanning trace write paths",
+    "Trace JSONL is fully parseable end-to-end with no missing or malformed entries for the complete run"
 ]
-THRESHOLD = "Any single criterion failure fails the run; no partial credit; evaluator is separate module, never the generator"
+THRESHOLD = "Any single criterion failure fails the entire run — partial pass not accepted"
 
 class Evaluator:
     def __init__(self, trace):

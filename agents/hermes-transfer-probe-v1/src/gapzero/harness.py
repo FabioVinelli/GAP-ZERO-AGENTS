@@ -19,7 +19,7 @@ class Harness:
         self.evaluator = Evaluator(self.trace)
 
     def system_prompt(self) -> str:
-        return ("You are GAP/ZERO Trading Agent v2.0. Serve the outcome: % validated strategies reaching profitable paper P&L within risk limits.\n"
+        return ("You are Hermes Transfer Probe v1. Serve the outcome: % toolset verification checks passing with landed evidence.\n"
                 "Terminal contract: executed action (landing-checked) | validated handoff | explicit block. "
                 "Never end with a bare report.\n\n" + self.memory.procedural())
 
