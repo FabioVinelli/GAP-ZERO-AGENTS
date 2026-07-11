@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/assets/gapzero-hero-banner.png" alt="GAP/ZERO Studio — AI Agent Factory. Insight to action, action to impact. Agent readiness 91/100, 12/12 binary gates passed, the action gap closed, artifact certified and shipped." width="100%">
+</p>
+
 # GAP/ZERO — Certified Gap-Free AI Agents
 
 **Agents building Agents with Zero operational GAPS.** Build · Audit · Certify · Deploy. GAP/ZERO is an agent factory built on one conviction: *intelligence without actuation is worthless.* Every agent that leaves this repo has its insight-to-action pipeline fully wired, landing-checked, policy-gated, and independently evaluated — certified against 12 binary gates before it ships.
@@ -20,6 +24,14 @@ Most enterprise AI pilots die in the gap between *insight* and *executed action*
 | **L5 Closed-loop PoC** | Sprint contract, success metric, pre-committed kill criteria, scale criteria, review trigger |
 
 **Certification:** 12 binary gates + a 100-point score across friction, time-to-action, trust, and quality+governance. `APPROVE ≥ 75` with all gates passing — anything less does not ship. A blueprint with a declared gap is *blocked from scaffolding by the build system itself.*
+
+## How it works
+
+<p align="center">
+  <img src="docs/assets/gapzero-architecture.png" alt="GAP/ZERO pipeline: the Studio (BUILD, AUDIT, SCAFFOLD, 12 gates) produces a GAP-FREE certified agent package containing a Python harness and skills, which deploys to Hermes and future platforms. Declared gaps are rejected at the stamp. Foundation: policy, landing checks, trace, evaluator." width="100%">
+</p>
+
+<p align="center"><em>The Studio certifies · the stamp rejects anything with a declared gap · the package onboards onto any platform.<br>Underneath every agent: policy engine, landing checks, JSONL trace, separate evaluator.</em></p>
 
 ## What's in this repo
 
