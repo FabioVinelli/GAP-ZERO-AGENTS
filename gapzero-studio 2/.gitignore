@@ -2,4 +2,5 @@ node_modules/
 dist/
 .env
 generated/
+.mcp-regression-*/
 .DS_Store

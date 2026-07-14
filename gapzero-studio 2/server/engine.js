@@ -16,7 +16,11 @@ Doctrine (Craig Le Clair / Forrester "Agentic Action Gap" + Anthropic harness de
 - Never invent integrations: unknown mechanism = GAP, not wired.
 - The 12 certification gates: 1 outcome contract+owner, 2 maturity classified, 3 pipeline fully typed/wired, 4 write-tools have mechanism+landing check+reversibility, 5 policy engine logs every write decision, 6 terminal node is action/handoff/block, 7 <=1 human validation + no middleware, 8 owner+detection+rollback named, 9 trace covers actuation+policy+validator, 10 separate evaluator w/ hard thresholds, 11 KPI standard + friction <=1, 12 PoC has sprint contract+kill+scale+review.
 - Verdict: APPROVE (score>=75, all critical gates pass) | DEFER (45-74 or any critical gap; state opportunity cost) | REJECT (<45, no outcome, or report-only output).
+- Set mcpRequired:true when wiring has 3+ steps or external mechanisms (API/REST, MCP, DB write, webhook, RPA/UI, file op). Optional wiring.requiresApproval for validator-gated reversible writes.
 Respond ONLY with minified JSON. No markdown fences, no prose. Terse phrases, not sentences.`;
+
+const EXTERNAL_MECHANISM = /API\/REST|MCP|DB write|webhook|RPA\/UI|file op/i;
+const APPROVAL_RISK_CLASS = "requires-validator-approval";
 
 export const schemaFor = (mode) => `JSON schema (all fields required unless noted):
 {"agentName":str,"verdict":"APPROVE"|"DEFER"|"REJECT","actionGapScore":0-100,
@@ -25,7 +29,10 @@ export const schemaFor = (mode) => `JSON schema (all fields required unless note
 "outcome":{"metric":str,"baseline":str,"target":str,"owner":str},
 "pipeline":[{"label":str(<=3 words),"type":"insight"|"system"|"human"|"action","wired":bool}] (5-7 nodes, insight first, action last),
 "friction":[{"point":str,"fix":str}] (max 4),
-"wiring":[{"step":str,"mechanism":str,"landingCheck":str,"reversibility":"reversible"|"compensable"|"irreversible"}] (max 4),
+"wiring":[{"step":str,"mechanism":str,"landingCheck":str,"reversibility":"reversible"|"compensable"|"irreversible","requiresApproval":bool?}] (max 4),
+"mcpRequired":bool? (optional; true=force MCP scaffold, false=skip, omit=auto),
+"platformConstraints":{"wsl2":bool?,"remoteBackend":bool?,"restrictedFilesystem":bool?} (optional),
+"mcpReusable":bool? (optional),
 "policyRules":[{"riskClass":str,"decision":"allow"|"block"|"escalate"}] (max 4),
 "humanTouchpoint":{"design":str,"owner":str,"detection":str,"rollback":str},
 "evaluator":{"criteria":[str] (3-5 principle-based gradable criteria),"threshold":str},
@@ -72,6 +79,66 @@ export function validateBlueprint(bp) {
   if (!Array.isArray(bp?.antiPatterns)) gaps.push("antiPatterns missing (empty array is valid; absent is not)");
   if (!bp?.nextAction) gaps.push("nextAction missing");
   return gaps;
+}
+
+/** Non-blocking MCP / approval warnings (separate from validateBlueprint gaps). */
+export function collectMcpWarnings(bp) {
+  const warnings = [];
+  const rules = bp?.policyRules || [];
+  (bp?.wiring || []).forEach((w, i) => {
+    if (!w.requiresApproval) return;
+    if (w.reversibility === "irreversible") return;
+    const covered = rules.some(
+      (r) =>
+        r.decision === "escalate" &&
+        (r.riskClass === APPROVAL_RISK_CLASS ||
+          /validator approval|requires approval/i.test(String(r.riskClass || "")))
+    );
+    if (!covered) {
+      warnings.push(
+        `wiring "${w.step || i}": requiresApproval set but no escalate policy for ${APPROVAL_RISK_CLASS}`
+      );
+    }
+  });
+  return warnings;
+}
+
+function autoMcpReasons(bp) {
+  const reasons = [];
+  const wiring = bp?.wiring || [];
+  if (wiring.length >= 3) reasons.push(`${wiring.length} wiring steps (>= 3)`);
+  wiring.forEach((w) => {
+    if (EXTERNAL_MECHANISM.test(String(w.mechanism || ""))) {
+      reasons.push(`external mechanism: ${w.step || w.mechanism}`);
+    }
+  });
+  const pc = bp?.platformConstraints || {};
+  if (pc.wsl2) reasons.push("platformConstraints.wsl2");
+  if (pc.remoteBackend) reasons.push("platformConstraints.remoteBackend");
+  if (pc.restrictedFilesystem) reasons.push("platformConstraints.restrictedFilesystem");
+  if (bp?.mcpReusable === true) reasons.push("mcpReusable flag");
+  return reasons;
+}
+
+/**
+ * Decide whether MCP server scaffolding should be generated.
+ * userOverride: true | false | "auto" (default)
+ */
+export function deriveMcpDecision(bp, userOverride = "auto") {
+  if (userOverride === true) {
+    return { enabled: true, reasons: ["user override: force MCP on"] };
+  }
+  if (userOverride === false) {
+    return { enabled: false, reasons: ["user override: force MCP off"] };
+  }
+  if (bp?.mcpRequired === true) {
+    return { enabled: true, reasons: ["blueprint mcpRequired: true"] };
+  }
+  if (bp?.mcpRequired === false) {
+    return { enabled: false, reasons: ["blueprint mcpRequired: false"] };
+  }
+  const reasons = autoMcpReasons(bp);
+  return { enabled: reasons.length > 0, reasons: reasons.length ? reasons : ["no auto MCP triggers"] };
 }
 
 // Robust JSON extraction: strip fences, then parse the first balanced JSON object.

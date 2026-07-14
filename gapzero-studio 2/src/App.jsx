@@ -46,10 +46,10 @@ async function apiRun(mode, input, model) {
   return data;
 }
 
-async function apiScaffold(blueprint) {
+async function apiScaffold(blueprint, mcpEnabled) {
   const r = await fetch("/api/scaffold", {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ blueprint }),
+    body: JSON.stringify({ blueprint, mcpEnabled }),
   });
   const data = await r.json();
   if (!r.ok) throw new Error(data.error || "Scaffold failed");
@@ -103,6 +103,43 @@ const Row = ({ left, right, danger }) => {
     <div style={{ display: "flex", gap: 12, padding: "8px 0", borderBottom: `1px solid ${T.paper}`, fontSize: 13.5, lineHeight: 1.45 }}>
       <div style={{ flex: 1, color: danger ? T.gap : T.ink, fontWeight: 500 }}>{left}</div>
       <div style={{ flex: 1.2, color: T.slate }}>{right}</div>
+    </div>
+  );
+};
+
+const CollapsibleSnippet = ({ title, content }) => {
+  const T = useT();
+  const [open, setOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1600);
+    } catch {}
+  };
+  if (!content) return null;
+  return (
+    <div style={{ marginTop: 10, border: `1px solid ${T.line}`, borderRadius: 3, overflow: "hidden" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", background: T.paper }}>
+        <button type="button" onClick={() => setOpen((v) => !v)} style={{
+          ...mono, flex: 1, textAlign: "left", fontSize: 11, letterSpacing: "0.08em", background: "none", border: "none",
+          color: T.ink, cursor: "pointer", fontWeight: 600, padding: 0,
+        }}>
+          {open ? "▼" : "▶"} {title}
+        </button>
+        <button type="button" onClick={copy} style={{
+          ...mono, fontSize: 10, letterSpacing: "0.08em", padding: "4px 8px", border: `1px solid ${T.line}`,
+          borderRadius: 3, background: T.panel, color: T.ink, cursor: "pointer",
+        }}>
+          {copied ? "COPIED ✓" : "COPY"}
+        </button>
+      </div>
+      {open && (
+        <pre style={{ ...mono, fontSize: 10.5, color: T.ink, background: T.panel, padding: 10, margin: 0, maxHeight: 240, overflow: "auto", whiteSpace: "pre-wrap" }}>
+          {content}
+        </pre>
+      )}
     </div>
   );
 };
@@ -264,6 +301,7 @@ export default function App() {
   const [input, setInput] = useState("");
   const [run, setRun] = useState({ status: "idle", data: null, error: null });
   const [scaffold, setScaffold] = useState({ status: "idle", data: null, error: null });
+  const [mcpEnabled, setMcpEnabled] = useState(false);
   const [health, setHealth] = useState(null);
   const [copied, setCopied] = useState(false);
   const [dark, setDark] = useState(() => {
@@ -291,8 +329,9 @@ export default function App() {
     setRun({ status: "loading", data: null, error: null });
     setScaffold({ status: "idle", data: null, error: null });
     try {
-      const { blueprint, warnings } = await apiRun(mode, input, model);
-      setRun({ status: "done", data: blueprint, warnings: warnings || [], error: null });
+      const { blueprint, warnings, mcpRecommendation, mcpWarnings } = await apiRun(mode, input, model);
+      setRun({ status: "done", data: blueprint, warnings: warnings || [], mcpRecommendation, mcpWarnings: mcpWarnings || [], error: null });
+      setMcpEnabled(Boolean(mcpRecommendation?.enabled));
     } catch (e) {
       setRun({ status: "error", data: null, error: e.message });
     }
@@ -302,7 +341,7 @@ export default function App() {
     if (!d || scaffold.status === "loading") return;
     setScaffold({ status: "loading", data: null, error: null });
     try {
-      const result = await apiScaffold(d);
+      const result = await apiScaffold(d, mcpEnabled);
       setScaffold({ status: "done", data: result, error: null });
     } catch (e) {
       setScaffold({ status: "error", data: null, error: e.message });
@@ -431,6 +470,17 @@ export default function App() {
                 </div>
               )}
 
+              {run.mcpWarnings?.length > 0 && (
+                <div className="rise" style={{ background: T.deferSoft, border: `1px solid ${T.defer}`, borderRadius: 4, padding: "12px 16px" }}>
+                  <div style={{ ...mono, fontSize: 10.5, letterSpacing: "0.12em", color: T.defer, fontWeight: 700, marginBottom: 6 }}>
+                    MCP WIRING NOTES — {run.mcpWarnings.length} WARNING{run.mcpWarnings.length > 1 ? "S" : ""}
+                  </div>
+                  {run.mcpWarnings.map((w, i) => (
+                    <div key={i} style={{ ...mono, fontSize: 11, color: T.ink, padding: "2px 0" }}>⚠ {w}</div>
+                  ))}
+                </div>
+              )}
+
               {/* Next action */}
               {d.nextAction && (
                 <div className="rise" style={{ background: T.actionSoft, border: `1px solid ${T.action}44`, borderRadius: 4, padding: "12px 16px", display: "flex", gap: 12, alignItems: "baseline" }}>
@@ -471,7 +521,16 @@ export default function App() {
                 </Panel>
                 <Panel title="Execution wiring · landing checks">
                   {(d.wiring || []).map((w, i) => (
-                    <Row key={i} left={<>{w.step}<br /><span style={{ ...mono, fontSize: 10, color: w.reversibility === "irreversible" ? T.gap : T.slate }}>{w.reversibility}</span></>}
+                    <Row key={i}
+                      left={<>
+                        {w.step}
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
+                          {w.mechanism && <Chip bg={T.paper} fg={T.slate}>{w.mechanism}</Chip>}
+                          {w.reversibility === "irreversible" && <Chip bg={T.gapSoft} fg={T.gap}>irreversible</Chip>}
+                          {w.requiresApproval && <Chip bg={T.deferSoft} fg={T.defer}>requires approval</Chip>}
+                        </div>
+                        <span style={{ ...mono, fontSize: 10, color: w.reversibility === "irreversible" ? T.gap : T.slate, display: "block", marginTop: 4 }}>{w.reversibility}</span>
+                      </>}
                       right={<>{w.mechanism}<br /><span style={{ ...mono, fontSize: 10.5, color: T.action }}>✓ {w.landingCheck}</span></>} />
                   ))}
                 </Panel>
@@ -507,7 +566,19 @@ export default function App() {
               </Panel>
 
               {/* Actions */}
-              <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+                  <label style={{ ...mono, fontSize: 12, display: "flex", alignItems: "center", gap: 8, cursor: "pointer", color: T.ink }}>
+                    <input type="checkbox" checked={mcpEnabled} onChange={(e) => setMcpEnabled(e.target.checked)} />
+                    Include MCP server scaffolding
+                  </label>
+                  {run.mcpRecommendation?.enabled && (
+                    <Chip bg={T.actionSoft} fg={T.action}>
+                      MCP recommended: {(run.mcpRecommendation.reasons || []).join(" · ") || "auto triggers met"}
+                    </Chip>
+                  )}
+                </div>
+                <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
                 <button onClick={copyBlueprint} style={{ ...mono, padding: "10px 18px", fontSize: 12, letterSpacing: "0.1em", background: T.panel, color: T.ink, border: `1px solid ${T.ink}`, borderRadius: 3, cursor: "pointer", fontWeight: 600 }}>
                   {copied ? "COPIED ✓" : "COPY BLUEPRINT JSON"}
                 </button>
@@ -516,8 +587,9 @@ export default function App() {
                   background: d.verdict === "APPROVE" ? T.action : T.defer, color: "#fff", border: "none",
                   cursor: scaffold.status === "loading" ? "wait" : "pointer",
                 }}>
-                  {scaffold.status === "loading" ? "SCAFFOLDING…" : `SCAFFOLD PYTHON AGENT${d.verdict !== "APPROVE" ? " (verdict ≠ APPROVE — close gaps first)" : ""}`}
+                  {scaffold.status === "loading" ? "SCAFFOLDING…" : `SCAFFOLD PYTHON AGENT${d.verdict !== "APPROVE" ? " (verdict ≠ APPROVE — close gaps first)" : ""}${mcpEnabled ? " + MCP" : ""}`}
                 </button>
+                </div>
               </div>
 
               {scaffold.status === "error" && (
@@ -526,6 +598,26 @@ export default function App() {
               {scaffold.status === "done" && scaffold.data && (
                 <Panel title="Scaffold generated — open in Cursor" accent={T.action}>
                   <div style={{ ...mono, fontSize: 12, color: T.action, marginBottom: 8 }}>{scaffold.data.dir}</div>
+                  {scaffold.data.mcp && (
+                    <div style={{ marginBottom: 12, padding: "10px 12px", background: T.actionSoft, border: `1px solid ${T.action}44`, borderRadius: 4 }}>
+                      <div style={{ ...mono, fontSize: 10.5, letterSpacing: "0.12em", color: T.action, fontWeight: 700, marginBottom: 6 }}>MCP LAYER</div>
+                      <div style={{ fontSize: 12.5, color: T.ink, marginBottom: 6 }}>
+                        {scaffold.data.mcpReasons?.length
+                          ? `Included: ${scaffold.data.mcpReasons.join(" · ")}`
+                          : "MCP server scaffolding included per your selection."}
+                      </div>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 4, marginBottom: 4 }}>
+                        {scaffold.data.files.filter((f) => f.startsWith("mcp") || f === "MCP_DEPLOY.md").map((f) => (
+                          <div key={f} style={{ ...mono, fontSize: 11, color: T.slate }}>· {f}</div>
+                        ))}
+                      </div>
+                      <div style={{ fontSize: 12, color: T.slate }}>
+                        Hermes tools appear as <span style={mono}>mcp_&lt;server&gt;_&lt;tool&gt;</span>. Edit absolute paths after git transfer — see <span style={mono}>MCP_DEPLOY.md</span>.
+                      </div>
+                      <CollapsibleSnippet title="hermes.config.yaml" content={scaffold.data.mcpSnippets?.hermes} />
+                      <CollapsibleSnippet title="cursor-mcp.json" content={scaffold.data.mcpSnippets?.cursor} />
+                    </div>
+                  )}
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 4 }}>
                     {scaffold.data.files.map((f) => (
                       <div key={f} style={{ ...mono, fontSize: 11, color: T.slate, padding: "3px 0" }}>· {f}</div>

@@ -1,8 +1,9 @@
 import dotenv from "dotenv";
 import express from "express";
+import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { SYSTEM_RULES_V2, schemaFor, buildTask, parseEngineJSON, validateBlueprint } from "./engine.js";
+import { SYSTEM_RULES_V2, schemaFor, buildTask, parseEngineJSON, validateBlueprint, deriveMcpDecision, collectMcpWarnings } from "./engine.js";
 import { generateScaffold } from "./scaffold.js";
 import { listAgents, runAgentTest } from "./runner.js";
 
@@ -102,7 +103,15 @@ app.post("/api/run", async (req, res) => {
         // repair attempt failed — return the first blueprint with its warnings
       }
     }
-    res.json({ blueprint, warnings, repaired, usage: data.usage || null, stopReason: data.stop_reason || null });
+    res.json({
+      blueprint,
+      warnings,
+      mcpWarnings: collectMcpWarnings(blueprint),
+      mcpRecommendation: deriveMcpDecision(blueprint),
+      repaired,
+      usage: data.usage || null,
+      stopReason: data.stop_reason || null,
+    });
   } catch (e) {
     res.status(e.status || 500).json({ error: `Engine run failed: ${e.message}. Shorten the spec and retry.` });
   }
@@ -110,7 +119,7 @@ app.post("/api/run", async (req, res) => {
 
 // ---- Scaffold: emit a full GAP/ZERO Python agent project from an approved blueprint ----
 app.post("/api/scaffold", async (req, res) => {
-  const { blueprint } = req.body || {};
+  const { blueprint, mcpEnabled = "auto" } = req.body || {};
   if (!blueprint?.agentName) return res.status(400).json({ error: "blueprint with agentName required" });
   const gaps = validateBlueprint(blueprint);
   if (gaps.length) {
@@ -120,7 +129,14 @@ app.post("/api/scaffold", async (req, res) => {
     });
   }
   try {
-    const result = await generateScaffold(blueprint, path.join(ROOT, "generated"));
+    const generatedRoot = path.join(ROOT, "generated");
+    const result = await generateScaffold(blueprint, generatedRoot, { mcpEnabled });
+    if (result.mcp) {
+      result.mcpSnippets = {
+        hermes: await fs.readFile(path.join(result.dir, "mcp-configs/hermes.config.yaml"), "utf8"),
+        cursor: await fs.readFile(path.join(result.dir, "mcp-configs/cursor-mcp.json"), "utf8"),
+      };
+    }
     res.json(result);
   } catch (e) {
     res.status(500).json({ error: `Scaffold failed: ${e.message}` });
